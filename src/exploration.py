@@ -2,52 +2,78 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+import math
+from scipy.stats import boxcox, yeojohnson
 
 
 # To plot correlation coefficient for each feature with each others
 def plot_numerical_correlation(
     X: pd.DataFrame,
-    numerical_features: list,
+    numerical_features: list[str],
+    ax=None,
+    figsize=(15, 12),
     save_path: str = None,
-) -> None:
+):
     """
     Computes and visualizes the Pearson correlation matrix for numerical features
-    using a heatmap.
-
-    Args:
-        X (pd.DataFrame): Input dataframe.
-        numerical_features (list): List of numerical column names to correlate.
+    using a heatmap. Supports subplot mode and clean individual saving.
+    Automatically shows annotation if <= 9 features.
     """
-    # Calculate the pairwise correlation of columns, excluding NA/null values
-    correlation_matrix = X[numerical_features].corr(method='pearson')
+    corr_matrix = X[numerical_features].corr(method="pearson")
 
-    plt.figure(figsize=(15, 12))
-    sns.heatmap(
-        correlation_matrix,
-        cmap='coolwarm',      # Diverging colormap (Red for pos, Blue for neg)
-        vmin=-1, vmax=1,      # Anchor the colormap range
-        center=0,             # Center the colormap at 0
-        linewidths=.5,
-        cbar_kws={'label': 'Correlation Coefficient'}
-    )
+    # Aktifkan angka jika heatmap kecil (kurang dari 10 fitur)
+    annot = len(numerical_features) < 10
+    if annot:
+        fmt = ".2f"
+        annot_kws = {"size" : figsize[0]}
+    else:
+        fmt, annot_kws = "", {}
 
-    plt.title('Numerical Features Correlation Heatmap (Pearson)',
-              fontsize=14, fontweight='bold')
+    if save_path is not None:
+        tmp_fig, tmp_ax = plt.subplots(figsize=figsize)
 
-    plt.xticks(rotation=45, ha='right', fontsize=10)
-    plt.yticks(rotation=0, fontsize=10)
-    plt.tight_layout()
+        sns.heatmap(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1, center=0,
+                    linewidths=.5, cbar_kws={'label': 'Correlation Coefficient'},
+                    annot=annot, fmt=fmt, ax=tmp_ax, annot_kws=annot_kws)
 
-    if save_path:
-        plt.savefig(save_path)
+        tmp_ax.set_title(
+            'Numerical Features Correlation Heatmap (Pearson)',
+            fontsize=20, fontweight='bold'
+        )
+        tmp_ax.set_xticklabels(tmp_ax.get_xticklabels(), rotation=45, ha='right', fontsize=figsize[0])
+        tmp_ax.set_yticklabels(tmp_ax.get_yticklabels(), rotation=0, fontsize=figsize[0])
 
-    plt.show()
+        tmp_fig.tight_layout()
+        tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        plt.close(tmp_fig)
+
+    standalone = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        standalone = True
+
+    sns.heatmap(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1, center=0,
+                linewidths=.5, cbar_kws={'label': 'Correlation Coefficient'},
+                annot=annot, fmt=".2f" if annot else "", ax=ax)
+
+    ax.set_title('Numerical Features Correlation Heatmap (Pearson)',
+                 fontsize=14, fontweight='bold')
+
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+
+    if standalone:
+        plt.tight_layout()
+        plt.show()
+
+    return ax
 
 
 def compare_features_boxplot(
     df: pd.DataFrame, cols: list[str],
     ax=None, colors=['#1f77b4', '#d62728'], save_path=None,
-    figsize: tuple[int] = (15, 6)
+    figsize: tuple[int] = (12, 7)
 ):
     if len(cols) != 2:
         raise ValueError("cols length must be exactly 2")
@@ -67,7 +93,6 @@ def compare_features_boxplot(
 
     if save_path or ax is None:
         tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Saved: {save_path}")
 
     if ax is not None:
         ax.clear()
@@ -86,7 +111,7 @@ def compare_features_distribution(
     df: pd.DataFrame, cols: list[str],
     ax=None, colors=['#1f77b4', '#d62728'],
     save_path: str = None,
-    figsize: tuple[int] = (15, 6)
+    figsize: tuple[int] = (12, 7)
 ):
     if len(cols) != 2:
         raise ValueError("cols length must be exactly 2")
@@ -115,7 +140,6 @@ def compare_features_distribution(
 
     if save_path:
         tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Saved: {save_path}")
 
     if ax is not None:
         ax.clear()
@@ -142,114 +166,92 @@ def compare_features_distribution(
     return corr_val
 
 
-# To plot target
-def check_transformations(series, target, bins=50):
-    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+def check_transformations(
+    series: pd.Series, target, save_path: str = None,
+    transforms=["original", "log", "sqrt"],
+    bins=50, colors: list[str] = ['#1f77b4', '#d62728']
+):
+    valid_transforms = ["original", "log", "sqrt", "cbrt","boxcox", "yeojohnson"]
 
-    # --- Original Data ---
-    sns.histplot(series, bins=bins, kde=True, ax=axes[0], color='skyblue', edgecolor='black')
-    axes[0].set_title(f'Original\n(Skew: {series.skew():.2f})', fontsize=14)
-
-    # --- Log Transformation ---
-    series_log = np.log(series[series > 0])
-    sns.histplot(series_log, bins=bins, kde=True, ax=axes[1], color='salmon', edgecolor='black')
-    axes[1].set_title(f'Log Transform\n(Skew: {series_log.skew():.2f})', fontsize=14)
-
-    # --- Square Root Transformation ---
-    series_sqrt = np.sqrt(series)
-    sns.histplot(series_sqrt, bins=bins, kde=True, ax=axes[2], color='lightgreen', edgecolor='black')
-    axes[2].set_title(f'Square Root Transform\n(Skew: {series_sqrt.skew():.2f})', fontsize=14)
-
-    plt.suptitle(f'{target} Distribution', fontsize=18, fontweight='bold')
-    plt.tight_layout()
-    plt.show()
-
-
-from scipy.stats import boxcox, yeojohnson
-
-def check_transformations(series, target, transforms=None, bins=50):
-    """
-    Menampilkan plot distribusi untuk beberapa transformasi yang dipilih.
-
-    Parameters
-    ----------
-    series : pd.Series
-        Data yang akan ditransformasi.
-    target : str
-        Nama fitur (untuk judul).
-    transforms : list[str]
-        List opsi transformasi.
-        Supported:
-            - 'original'
-            - 'log'
-            - 'sqrt'
-            - 'boxcox'      (positif only)
-            - 'yeojohnson'  (boleh negatif)
-    bins : int
-        Jumlah bins untuk histogram.
-    """
-
-    if transforms is None:
-        transforms = ["original", "log", "sqrt"]  # default 3 transformasi utama
-
-    valid_transforms = ["original", "log", "sqrt", "boxcox", "yeojohnson"]
-
-    # Validasi input
     for t in transforms:
         if t not in valid_transforms:
             raise ValueError(f"Transform '{t}' belum didukung. Pilihan: {valid_transforms}")
 
-    # Setup subplot
-    fig, axes = plt.subplots(1, len(transforms), figsize=(6 * len(transforms), 5))
+    max_cols = 3
+    n = len(transforms)
 
-    # Kalau cuma 1 transformasi, axes bukan array → ubah jadi list
-    if len(transforms) == 1:
-        axes = [axes]
+    n_cols = min(n, max_cols)
+    n_rows = math.ceil(n / max_cols)
 
-    for ax, tname in zip(axes, transforms):
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+
+    axes = np.array(axes).reshape(-1)
+    for idx, (ax, tname) in enumerate(zip(axes, transforms)):
 
         # === ORIGINAL ===
         if tname == "original":
             transformed = series.copy()
             title = "Original"
 
-        # === LOG TRANSFORM ===
         elif tname == "log":
             transformed = np.log(series[series > 0])
             title = "Log Transform"
 
-        # === SQRT TRANSFORM ===
         elif tname == "sqrt":
             transformed = np.sqrt(series.clip(lower=0))
             title = "Square Root"
 
-        # === BOX-COX (Positif Only) ===
+        elif tname == "cbrt":
+            transformed = np.cbrt(series.clip(lower=0))
+            title = "Cube Root"
+
         elif tname == "boxcox":
             positive = series[series > 0]
             transformed, _ = boxcox(positive)
             title = "Box-Cox Transform"
 
-        # === YEO JOHNSON (Dukungan Negatif) ===
         elif tname == "yeojohnson":
             transformed, _ = yeojohnson(series)
             title = "Yeo-Johnson Transform"
 
-        # === PLOTTING ===
-        sns.histplot(transformed, bins=bins, kde=True, ax=ax, color='skyblue', edgecolor='black')
-        ax.set_title(f"{title}\nSkew: {pd.Series(transformed).skew():.2f}", fontsize=14)
+        sns.histplot(
+            transformed, bins=bins, kde=True, ax=ax,
+            color=colors[idx % 2], edgecolor='black', alpha=0.6
+        )
+
+        ax.set_title(
+            f"{title}\nSkew: {pd.Series(transformed).skew():.2f}",
+            fontsize=14, fontweight='bold'
+        )
         ax.set_xlabel(target)
+        ax.grid(alpha=0.3)
 
-    plt.suptitle(f"{target} Distribution & Applied Transformations", fontsize=18, fontweight='bold')
+    for j in range(len(transforms), len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.suptitle(
+        f"{target} Distribution – Transform Comparison",
+        fontsize=20, fontweight='bold', y=1.01
+    )
+
     plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+
     plt.show()
-
-
 
 # ======================= ASTRONOMICAL FUNCTIONS ======================= #
 
-def plot_monthly_seasonality(df, target, ax=None):
+def plot_monthly_seasonality(
+    df: pd.DataFrame,
+    target: str,
+    ax=None,
+    figsize=(12, 7),
+    save_path: str = None
+):
     """
     Plot monthly seasonality of energy output and GHI.
+    Supports both subplot mode and standalone saving.
     """
     data = df.copy()
     data['Timestamp'] = pd.to_datetime(data['Timestamp'])
@@ -257,63 +259,67 @@ def plot_monthly_seasonality(df, target, ax=None):
 
     monthly_stats = data.groupby('Month')[[target, 'GHI']].mean()
 
-    # Axis handling
+    if save_path is not None:
+        tmp_fig, tmp_ax1 = plt.subplots(figsize=figsize)
+        tmp_ax2 = tmp_ax1.twinx()
+
+        sns.lineplot(x=monthly_stats.index, y=monthly_stats[target],
+                     ax=tmp_ax1,color='blue',marker='o',label=target)
+        sns.lineplot(x=monthly_stats.index,y=monthly_stats['GHI'],
+                     ax=tmp_ax2,color='orange',linestyle='--',marker='s',label='GHI')
+
+        tmp_ax1.set_title("Monthly Average: Seasonality Check")
+        tmp_ax1.set_ylabel(target)
+        tmp_ax2.set_ylabel("GHI")
+        tmp_ax1.grid(True, alpha=0.3)
+
+        h1, l1 = tmp_ax1.get_legend_handles_labels()
+        h2, l2 = tmp_ax2.get_legend_handles_labels()
+        tmp_ax1.legend(h1 + h2, l1 + l2, loc="upper left")
+
+        tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(tmp_fig)
+
+
     standalone = False
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=figsize)
         standalone = True
 
     ax1 = ax
     ax2 = ax1.twinx()
 
-    # Main line
-    l1 = sns.lineplot(
-        x=monthly_stats.index, y=monthly_stats[target],
-        ax=ax1, color='blue', marker='o', label=target
-    )
+    sns.lineplot(x=monthly_stats.index, y=monthly_stats[target],
+                 ax=ax1, color='blue', marker='o', label=target)
+    sns.lineplot(x=monthly_stats.index, y=monthly_stats['GHI'],
+                 ax=ax2, color='orange', linestyle='--', marker='s', label='GHI')
 
-    # Secondary line
-    l2 = sns.lineplot(
-        x=monthly_stats.index, y=monthly_stats['GHI'],
-        ax=ax2, color='orange', linestyle='--', marker='s', label='GHI'
-    )
-
-    # Titles & labels
     ax1.set_title("Monthly Average: Seasonality Check")
     ax1.set_ylabel(target)
     ax2.set_ylabel("GHI")
     ax1.grid(True, alpha=0.3)
 
-    # -----------------------------------------------
-    # 🔥 FIX LEGEND: ambil legend dari kedua axis
-    # -----------------------------------------------
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-
-    # Gabungkan
-    handles = handles1 + handles2
-    labels = labels1 + labels2
-
-    # Hapus legend default → taruh gabungan di axis kiri
-    ax1.legend(handles, labels, loc='upper left')
+    h1, l1 = ax1.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax1.legend(h1 + h2, l1 + l2, loc="upper left")
 
     if standalone:
         plt.tight_layout()
         plt.show()
 
+    return ax
 
-def plot_diurnal_cycle(df, target, ax=None):
+
+def plot_diurnal_cycle(
+    df: pd.DataFrame,
+    target: str,
+    ax=None,
+    figsize=(12, 7),
+    save_path: str = None
+):
     """
     Plot normalized diurnal cycle for TARGET, GHI, and DNI.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Data containing Timestamp, target, GHI, DNI.
-    target : str
-        Target column name.
-    ax : matplotlib.axes.Axes or None
-        If provided, plot in subplot. Otherwise create standalone figure.
+    Supports both standalone plot and clean individual saving.
     """
     data = df.copy()
     data['Timestamp'] = pd.to_datetime(data['Timestamp'])
@@ -322,14 +328,32 @@ def plot_diurnal_cycle(df, target, ax=None):
     hourly_stats = data.groupby('Hour')[[target, 'GHI', 'DNI']].mean()
     hourly_norm = (hourly_stats - hourly_stats.min()) / (hourly_stats.max() - hourly_stats.min())
 
+    if save_path is not None:
+        tmp_fig, tmp_ax = plt.subplots(figsize=figsize)
+
+        sns.lineplot(data=hourly_norm, x=hourly_norm.index, y=target, ax=tmp_ax, label=target, color='blue')
+        sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='GHI', ax=tmp_ax, label='GHI', color='orange')
+        sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='DNI', ax=tmp_ax, label='DNI', linestyle=':', color='green')
+
+        peak_hour = hourly_stats['GHI'].idxmax()
+        tmp_ax.axvline(peak_hour, color='red', linestyle='--', label=f"Peak {peak_hour}:00")
+
+        tmp_ax.set_title("Diurnal Cycle – Solar Noon Check")
+        tmp_ax.set_ylabel("Normalized Value (0-1)")
+        tmp_ax.legend()
+        tmp_ax.grid(True, alpha=0.3)
+
+        tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(tmp_fig)
+
     standalone = False
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=figsize)
         standalone = True
 
-    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y=target, ax=ax, label=target)
-    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='GHI', ax=ax, label='GHI')
-    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='DNI', ax=ax, label='DNI', linestyle=':')
+    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y=target, ax=ax, label=target, color='blue')
+    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='GHI', ax=ax, label='GHI', color='orange')
+    sns.lineplot(data=hourly_norm, x=hourly_norm.index, y='DNI', ax=ax, label='DNI', linestyle=':', color='green')
 
     peak_hour = hourly_stats['GHI'].idxmax()
     ax.axvline(peak_hour, color='red', linestyle='--', label=f"Peak {peak_hour}:00")
@@ -343,88 +367,66 @@ def plot_diurnal_cycle(df, target, ax=None):
         plt.tight_layout()
         plt.show()
 
-
-def plot_physics_correlation(df, target, features, ax=None):
-    """
-    Plot correlation heatmap between target and physics-related features.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing target + features.
-    target : str
-        Target column name.
-    features : list
-        List of feature column names (e.g. GHI, DNI, tempC).
-    ax : matplotlib.axes.Axes or None
-    """
-    corr_cols = [target] + features
-    corr_matrix = df[corr_cols].corr()
-
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5))
-        standalone = True
-
-    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
-    ax.set_title("Physics Correlation Matrix")
-
-    if standalone:
-        plt.tight_layout()
-        plt.show()
+    return ax
 
 
-def plot_irradiance_scatter(df, target, ax=None, colors=None):
-    """
-    Scatter plot: GHI and DNI vs Target.
+def plot_two_feature_scatter(
+    df: pd.DataFrame,
+    feature1: str,
+    feature2: str,
+    target: str,
+    ax=None,
+    colors=['#1f77b4', '#d62728'],
+    figsize=(12, 7),
+    save_path: str = None,
+    sample: int = 5000
+):
+    # Filter sample for performance
+    data = df.sample(min(sample, len(df)), random_state=42)
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing GHI, DNI, and target.
-    target : str
-        Target column name.
-    ax : matplotlib.axes.Axes or None
-    colors : list[str] or None
-        Warna untuk [GHI, DNI]. Default: biru & merah kontras.
-    """
-    # default warna kontras
-    if colors is None:
-        colors = ['#1f77b4', '#d62728']   # blue, red
+    if save_path is not None:
+        tmp_fig, tmp_ax = plt.subplots(figsize=figsize)
 
-    data = df[df['GHI'] > 10].sample(min(2000, len(df)), random_state=42)
+        sns.scatterplot(data=data, x=feature1, y=target, ax=tmp_ax, alpha=0.30,
+                        label=f'{feature1} vs {target}', color=colors[0])
+
+        sns.scatterplot(data=data, x=feature2, y=target, ax=tmp_ax, alpha=0.30,
+                        label=f'{feature2} vs {target}', color=colors[1])
+
+        tmp_ax.set_title(f"{feature1} & {feature2} vs {target}")
+        tmp_ax.set_xlabel("Feature Value")
+        tmp_ax.set_ylabel(target)
+        tmp_ax.legend()
+
+        tmp_fig.tight_layout()
+        tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+        plt.close(tmp_fig)
 
     standalone = False
     if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, ax = plt.subplots(figsize=figsize)
         standalone = True
 
-    sns.scatterplot(
-        data=data,
-        x='GHI', y=target,
-        ax=ax,
-        alpha=0.30,
-        label='GHI vs Target',
-        color=colors[0],
-    )
+    sns.scatterplot(data=data, x=feature1, y=target, ax=ax, alpha=0.30,
+                    label=f'{feature1} vs {target}', color=colors[0])
+    sns.scatterplot(data=data, x=feature2, y=target, ax=ax, alpha=0.30,
+                    label=f'{feature2} vs {target}', color=colors[1])
 
-    sns.scatterplot(
-        data=data,
-        x='DNI', y=target,
-        ax=ax,
-        alpha=0.30,
-        label='DNI vs Target',
-        color=colors[1],
-    )
-
-    ax.set_title("Irradiance Impact: GHI & DNI vs Energy Output")
-    ax.set_xlabel("Irradiance (W/m²)")
+    ax.set_title(f"{feature1} & {feature2} vs {target}")
+    ax.set_xlabel("Feature Value")
     ax.set_ylabel(target)
     ax.legend()
 
     if standalone:
         plt.tight_layout()
         plt.show()
+
+    return ax
+
+
+
+# ============================ MONTHLY ANALYSIS ============================ #
 
 
 def _prepare_month(df):
@@ -443,101 +445,6 @@ def _prepare_month(df):
     return df, order
 
 
-def plot_monthly_target_distribution(df, target_col='% Baseline', ax=None):
-    """
-    Monthly distribution plot for target (% Baseline).
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing Timestamp and target column.
-    target_col : str
-        Column name of the target variable.
-    ax : matplotlib.axes.Axes or None
-        If provided, plot within subplot; if None, create standalone figure.
-    """
-    data, order = _prepare_month(df)
-
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(12, 5))
-        standalone = True
-
-    sns.boxplot(
-        data=data, x='Month_Name', y=target_col,
-        order=order, palette='viridis', ax=ax
-    )
-    ax.set_title('Monthly Energy Distribution (Target)', fontsize=14)
-    ax.set_ylabel('Energy Output (%)')
-    ax.grid(True, axis='y', alpha=0.3)
-
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
-def plot_monthly_ghi_distribution(df, ax=None):
-    """
-    Monthly GHI distribution.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing Timestamp and GHI.
-    ax : matplotlib.axes.Axes or None
-        If provided, plot within subplot; if None, create standalone figure.
-    """
-    data, order = _prepare_month(df)
-
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(12, 5))
-        standalone = True
-
-    sns.boxplot(
-        data=data, x='Month_Name', y='GHI',
-        order=order, palette='Oranges', ax=ax
-    )
-    ax.set_title('Monthly Irradiance Distribution (GHI)', fontsize=14)
-    ax.set_ylabel('GHI (W/m²)')
-    ax.grid(True, axis='y', alpha=0.3)
-
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
-def plot_monthly_temperature_distribution(df, ax=None):
-    """
-    Monthly temperature distribution.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing Timestamp and tempC.
-    ax : matplotlib.axes.Axes or None
-        If provided, plot within subplot; if None, create standalone figure.
-    """
-    data, order = _prepare_month(df)
-
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(12, 5))
-        standalone = True
-
-    sns.boxplot(
-        data=data, x='Month_Name', y='tempC',
-        order=order, palette='coolwarm', ax=ax
-    )
-    ax.set_title('Monthly Temperature Distribution', fontsize=14)
-    ax.set_ylabel('Temperature (°C)')
-    ax.grid(True, axis='y', alpha=0.3)
-
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
 def _prep_daylight(df):
     """Return two filtered datasets: day_data and high_sun_data."""
     day_data = df[df['GHI'] > 10].copy()
@@ -546,121 +453,171 @@ def _prep_daylight(df):
     return day_data, high_sun_data
 
 
-def plot_temp_vs_efficiency(df, ax=None):
-    """
-    Analyze thermal effects: Temperature vs raw panel efficiency.
+def plot_monthly_boxplot(
+    df: pd.DataFrame,
+    col: str,
+    title: str,
+    ylabel: str,
+    palette='viridis',
+    ax=None,
+    figsize=(12, 7),
+    save_path: str = None
+):
+    data, order = _prepare_month(df)
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing tempC, GHI, and % Baseline.
-    ax : matplotlib.axes.Axes or None
-        If provided, plot inside subplot; otherwise standalone.
-    """
-    day_data, high_sun_data = _prep_daylight(df)
+    if save_path:
+        tmp_fig, tmp_ax = plt.subplots(figsize=figsize)
 
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5))
-        standalone = True
+        sns.boxplot(
+            data=data,
+            x='Month_Name',
+            y=col,
+            order=order,
+            palette=palette,
+            ax=tmp_ax
+        )
 
-    sns.scatterplot(
-        data=high_sun_data,
-        x='tempC', y='raw_efficiency',
-        alpha=0.1, ax=ax, color='crimson'
-    )
-    sns.regplot(
-        data=high_sun_data,
-        x='tempC', y='raw_efficiency',
-        scatter=False, ax=ax,
-        color='black', line_kws={'linestyle': '--'}
-    )
+        tmp_ax.set_title(title, fontsize=14)
+        tmp_ax.set_ylabel(ylabel)
+        tmp_ax.grid(True, axis='y', alpha=0.3)
 
-    ax.set_title('Thermal Physics: Temperature vs Efficiency')
-    ax.set_xlabel('Temperature (°C)')
-    ax.set_ylabel('Raw Efficiency')
-    ax.grid(True, alpha=0.3)
+        tmp_fig.savefig(save_path, dpi=300, bbox_inches="tight")
 
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
-def plot_cloudcover_vs_energy(df, ax=None):
-    """
-    Cloud opacity impact: Cloud Cover (%) vs Energy Output.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing cloudcover, % Baseline, GHI.
-    ax : matplotlib.axes.Axes or None
-    """
-    day_data, _ = _prep_daylight(df)
+        plt.close(tmp_fig)
 
     standalone = False
     if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5))
-        standalone = True
-
-    sns.scatterplot(
-        data=day_data,
-        x='cloudcover', y='% Baseline',
-        alpha=0.05, ax=ax, color='dodgerblue'
-    )
-    sns.regplot(
-        data=day_data,
-        x='cloudcover', y='% Baseline',
-        scatter=False, ax=ax, color='darkblue'
-    )
-
-    ax.set_title('Cloud Opacity: Cloud Cover vs Energy Output')
-    ax.set_xlabel('Cloud Cover (%)')
-    ax.set_ylabel('Energy Output (%)')
-    ax.grid(True, alpha=0.3)
-
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
-def plot_cloudtype_impact(df, sort_by='median', ax=None):
-    """
-    Impact of cloud categories on energy output.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset containing Cloud Type, % Baseline, GHI.
-    sort_by : {'median', 'Q3'}
-        Sorting method for categories.
-    ax : matplotlib.axes.Axes or None
-    """
-    day_data, _ = _prep_daylight(df)
-
-    if sort_by == 'Q3':
-        order_metric = day_data.groupby('Cloud Type')['% Baseline'].quantile(0.75)
-    else:
-        order_metric = day_data.groupby('Cloud Type')['% Baseline'].median()
-
-    order_sorted = order_metric.sort_values(ascending=False).index.tolist()
-
-    standalone = False
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=figsize)
         standalone = True
 
     sns.boxplot(
-        data=day_data,
-        x='Cloud Type', y='% Baseline',
-        order=order_sorted, ax=ax, palette='Spectral'
+        data=data,
+        x='Month_Name',
+        y=col,
+        order=order,
+        palette=palette,
+        ax=ax
     )
-    ax.set_title(f'Cloud Type Impact (Sorted by {sort_by})')
-    ax.set_xlabel('Cloud Type')
-    ax.set_ylabel('Energy Output (%)')
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
-    ax.grid(True, alpha=0.3, axis='y')
+
+    ax.set_title(title, fontsize=14)
+    ax.set_ylabel(ylabel)
+    ax.grid(True, axis='y', alpha=0.3)
 
     if standalone:
         plt.tight_layout()
         plt.show()
+
+    return ax
+
+
+def plot_feature_vs_target(
+    df, x, y,
+    filter_mode=None, ax=None,
+    title="", xlabel="",
+    ylabel="", color="blue",
+    reg_color="black",
+    figsize=(12, 7),
+    scatter_alpha=0.1,
+    save_path=None
+):
+    # Apply filtering using your helper
+    if filter_mode == "day":
+        df, _ = _prep_daylight(df)
+        df = df  # day_data
+    elif filter_mode == "highsun":
+        _, df = _prep_daylight(df)
+        df = df  # high_sun_data
+
+    # SAVE section
+    if save_path:
+        fig_tmp, ax_tmp = plt.subplots(figsize=figsize)
+
+        sns.scatterplot(df, x=x, y=y, ax=ax_tmp,
+                        alpha=scatter_alpha, color=color)
+        sns.regplot(df, x=x, y=y, ax=ax_tmp, scatter=False,
+                    color=reg_color, line_kws={'linestyle': '--'})
+
+        ax_tmp.set_title(title)
+        ax_tmp.set_xlabel(xlabel)
+        ax_tmp.set_ylabel(ylabel)
+        ax_tmp.grid(True, alpha=0.3)
+
+        fig_tmp.tight_layout()
+        fig_tmp.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig_tmp)
+
+    # NORMAL PLOT
+    standalone = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        standalone = True
+
+    sns.scatterplot(df, x=x, y=y, ax=ax,
+                    alpha=scatter_alpha, color=color)
+    sns.regplot(df, x=x, y=y, scatter=False, ax=ax,
+                color=reg_color, line_kws={'linestyle': '--'})
+
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
+
+    if standalone:
+        plt.tight_layout()
+        plt.show()
+
+    return ax
+
+
+def plot_categorical_impact(
+    df,
+    category: str,
+    target: str,
+    sort_by: str = "median",      # "median" | "Q3"
+    filter_mode: str = "day",      # None | "day" | "highsun"
+    palette: str = "Spectral",
+    ax=None,
+    figsize=(12, 7),
+    save_path: str = None
+):
+    df1, df2 = _prep_daylight(df)
+    if filter_mode == "day":
+        df = df1
+    elif filter_mode == "highsun":
+        df = df2
+
+    if sort_by == "Q3":
+        order_vals = df.groupby(category)[target].quantile(0.75)
+    else:
+        order_vals = df.groupby(category)[target].median()
+
+    order_sorted = order_vals.sort_values(ascending=False).index.tolist()
+
+    standalone = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        standalone = True
+    else:
+        fig = ax.figure
+
+    sns.boxplot(data=df, x=category, y=target, order=order_sorted, palette=palette, ax=ax)
+
+    ax.set_title(f"{category} Impact on {target} (Sorted by {sort_by})")
+    ax.set_xlabel(category)
+    ax.set_ylabel(target)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+    ax.grid(True, axis="y", alpha=0.3)
+
+    if save_path:
+        plt.tight_layout()
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    if standalone:
+        plt.tight_layout()
+        plt.show()
+
+    return ax
+
+
+# ================================= TIME SERIES ANALYSIS ================================= #
+
