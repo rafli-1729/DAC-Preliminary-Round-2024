@@ -15,42 +15,47 @@ The workflow follows a structured sequence consisting of data cleaning, explorat
 
 ```text
 solar-panel-efficiency-analysis
-├── .gitignore
 ├── README.md
 ├── requirements.txt
-│
+├── .gitignore
 ├── data
-│   ├── processed
+│   ├── raw
+│   │   ├── metadata.csv
+│   │   ├── sample_submission.csv
 │   │   ├── train.csv
 │   │   ├── test.csv
-│   │   ├── train_engineered.csv
-│   │   └── test_engineered.csv
-│   │
-│   └── raw
-│       ├── metadata.csv
+│   │   ├── Weather.csv
+│   │   └── solar-irradiance
+│   │       ├── Solar_Irradiance_2014.csv
+│   │       ├── Solar_Irradiance_2015.csv
+│   │       ├── Solar_Irradiance_2016.csv
+│   │       └── Solar_Irradiance_2017.csv
+│   └── processed
+│       ├── train_engineered.csv
+│       ├── test_engineered.csv
 │       ├── train.csv
-│       ├── test.csv
-│       ├── Weather.csv
-│       └── solar-irradiance/
-│
+│       └── test.csv
+├── models
+│   ├── config
+│   │   ├── lgbm_best_params.json
+│   │   └── xgb_best_params.json
+│   └── inference
+│       └── submission.csv
 ├── notebooks
 │   ├── 01_cleaning.ipynb
 │   ├── 02_eda.ipynb
 │   ├── 03_preprocessing.ipynb
-│   ├── 04_train.ipynb
-│   ├── 05_postprocessing.ipynb
-│   └── 06_evaluate.ipynb
-│
+│   └── 04_train.ipynb
 ├── reports
 │   ├── executive_summary.md
 │   ├── final_report.pdf
-│   │
 │   └── figures
-│       ├── general/
 │       ├── astronomical/
+│       ├── general/
+│       ├── model_eval/
 │       ├── monthly/
-│       └── similar/
-│
+│       ├── similar/
+│       └── timeseries/
 └── src
     ├── preprocessing.py
     ├── exploration.py
